@@ -1,0 +1,133 @@
+version: 2.1
+
+parameters:
+  ssh-fingerprint:
+    type: string
+    default: "SHA256:r/0YTSpeTcY6psL0RvgtmDjZJB+raeTcfd/5bcQQ2DQ"
+  build-apps:
+    type: boolean
+    default: false
+  build-all:
+    type: boolean
+    default: false
+
+orbs:
+  vfcommon: voiceflow/common@0.48.0
+  sonarcloud: sonarsource/sonarcloud@2.0.0
+
+defaults:
+  slack-fail-post-step: &slack-fail-post-step
+    post-steps:
+      - vfcommon/notify_slack:
+          channel: dev_general
+          event: fail
+          mentions: "@eng_platform"
+          template: basic_fail_1
+          branch_pattern: master
+
+executors:
+  playwright:
+    docker:
+      - image: mcr.microsoft.com/playwright:v1.41.1-jammy
+
+jobs:
+  test: # Main unit, style, and dependency tests
+    executor: vfcommon/node-executor-node-20
+    steps: # a collection of executable commands
+      - checkout
+      - attach_workspace:
+          at: ~/voiceflow
+      - vfcommon/install_node_modules:
+          avoid_post_install_scripts: false
+      - vfcommon/monorepo_lint_report:
+          run_on_root: true
+      - vfcommon/monorepo_dependency_tests:
+          run_on_root: true
+      - vfcommon/monorepo_unit_tests:
+          run_on_root: true
+      - vfcommon/monorepo_save_cache:
+          package: "all"
+          monorepo_engine: "turborepo"
+          cache_identifier: "monorepo-test-cache"
+      ## disable sonarcloud until project set up
+      # - sonarcloud/scan
+
+  e2e:
+    executor: playwright
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - vfcommon/install_node_modules:
+          avoid_post_install_scripts: false
+      - run:
+          working_directory: packages/react-chat
+          command: yarn test:e2e
+      - store_artifacts:
+          path: packages/react-chat/test-results
+
+  push-to-cdn: # Main unit, style, and dependency tests
+    executor: vfcommon/node-executor-node-20
+    steps: # a collection of executable commands
+      - attach_workspace:
+          at: ~/voiceflow
+      - vfcommon/clone_s3_assets:
+          step_name: Uploading React Chat to CDN
+          from: packages/react-chat/dist
+          to: s3://cdn.voiceflow.com/widget
+          clean_destination: false
+
+workflows:
+  test-and-release:
+    jobs:
+      - vfcommon/install_and_build:
+          <<: *slack-fail-post-step
+          executor: vfcommon/node-large-executor-node-20
+          context: dev-test
+          avoid_post_install_scripts: false
+          name: build
+          package: all
+          monorepo_engine: "turborepo"
+          force_execute: true
+          run_in_container: false
+          container_folder_to_copy: "" #Copy all
+          post_build_steps:
+            - persist_to_workspace:
+                root: "."
+                paths:
+                  - ./packages/*/dist # persist dist folder too
+
+      - test:
+          <<: *slack-fail-post-step
+          context: dev-test
+          requires:
+            - build
+
+      - e2e:
+          <<: *slack-fail-post-step
+          context: dev-test
+          requires:
+            - build
+
+      - vfcommon/monorepo_release:
+          <<: *slack-fail-post-step
+          executor: vfcommon/node-executor-node-20
+          avoid_post_install_scripts: false
+          ssh_key: << pipeline.parameters.ssh-fingerprint >>
+          context: dev-test
+          release_engine: "lite"
+          commit_message: "chore(release): publish --skip-ci"
+          requires:
+            - test
+            - e2e
+          filters:
+            branches:
+              only: master
+
+      - push-to-cdn:
+          context: dev-test
+          requires:
+            - vfcommon/monorepo_release
+          filters:
+            branches:
+              only: master
