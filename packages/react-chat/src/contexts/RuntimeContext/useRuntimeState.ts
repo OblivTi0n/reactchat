@@ -19,6 +19,7 @@ import { NoReply } from './traces/NoReply.trace';
 import { ResponseExtensions } from './traces/ResponseExtensions.trace';
 import { useNoReply } from './useNoReply';
 import { createContext, useRuntimeAPI } from './useRuntimeAPI';
+import {LiveAgent} from "@/contexts/RuntimeContext/traces/liveAgent.trace";
 
 export interface Settings {
   assistant: AssistantOptions;
@@ -49,6 +50,7 @@ export const useRuntimeState = ({ assistant, config, traceHandlers }: Settings) 
     ...session,
     traceHandlers: [
       NoReply(setNoReplyTimeout),
+      LiveAgent(),
       ...EffectExtensions(assistant.extensions),
       ...ResponseExtensions(assistant.extensions),
       ...(traceHandlers ?? []),
