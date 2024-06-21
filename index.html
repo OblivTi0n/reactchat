@@ -10,18 +10,119 @@
 <body>
   <h1>webchat</h1>
   <script type="text/javascript">
-    (function (d, t) {
-      var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
-      v.onload = function () {
-        window.voiceflow.chat.load({
-          verify: { projectID: '65aa12175c0f964e33ca08f8' },
-          url: 'https://general-runtime.voiceflow.com',
-          versionID: 'production'
-        });
-      }
+    const FormExtension = {
+        name: 'Forms',
+        type: 'response',
+        match: ({ trace }) =>
+            trace.type === 'ext_form' || trace.payload.name === 'ext_form',
+        render: ({ trace, element }) => {
+            const formContainer = document.createElement('form');
+
+            formContainer.innerHTML = `
+      <style>
+        label {
+          font-size: 0.8em;
+          color: #888;
+        }
+        input[type="text"], input[type="email"], input[type="tel"], textarea {
+          width: 100%;
+          border: none;
+          border-bottom: 0.5px solid rgba(0, 0, 0, 0.1);
+          background: transparent;
+          margin: 5px 0;
+          outline: none;
+        }
+        .phone {
+          width: 150px;
+        }
+        .invalid {
+          border-color: red;
+        }
+        .submit, .cancel {
+          border: none;
+          color: white;
+          padding: 10px;
+          border-radius: 5px;
+          width: 100%;
+          cursor: pointer;
+        }
+        .submit {
+          background: linear-gradient(to right, #2e6ee1, #2e7ff1);
+        }
+        .cancel {
+          background: red;
+        }
+      </style>
+
+      <label for="name">Name</label>
+      <input type="text" class="name" name="name" placeholder="Enter your name" required><br><br>
+
+      <label for="email">Email</label>
+      <input type="email" class="email" name="email" placeholder="Enter your email" required pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$" title="Invalid email address"><br><br>
+
+      <label for="problem">Explain your problem</label>
+      <textarea class="problem" name="problem" placeholder="Please explain why you are requesting a refund" required rows="4"></textarea><br><br>
+
+      <input type="submit" class="submit" value="Submit">
+
+      <button type="button" class="cancel">Cancel</button>
+    `;
+
+            formContainer.addEventListener('submit', function (event) {
+                event.preventDefault();
+
+                const name = formContainer.querySelector('.name');
+                const email = formContainer.querySelector('.email');
+                const problem = formContainer.querySelector('.problem');
+
+                if (!name.checkValidity() || !email.checkValidity() || !problem.checkValidity()) {
+                    name.classList.add('invalid');
+                    email.classList.add('invalid');
+                    problem.classList.add('invalid');
+                    return;
+                }
+
+                formContainer.querySelector('.submit').remove();
+
+                window.voiceflow.chat.interact({
+                    type: 'complete',
+                    payload: { name: name.value, email: email.value, problem: problem.value },
+                });
+            });
+
+            formContainer.querySelector('.cancel').addEventListener('click', function () {
+                window.voiceflow.chat.interact({
+                    type: 'complete',
+                    payload: { name: 'cancel', email: 'cancel', problem: 'cancel' },
+                });
+            });
+
+            element.appendChild(formContainer);
+        },
+    };
+
+    (function(d, t) {
+        var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
+        v.onload = function() {
+            window.voiceflow.chat.load({
+                verify: { projectID: '6642aadd22248fe8868ce6b3' },
+                url: 'https://general-runtime.voiceflow.com',
+                versionID: 'production',
+                allowDangerousHTML: true,
+                assistant: {
+                    extensions: [
+                        FormExtension,
+                    ],
+                },
+            });
+        }
       v.src = "https://oblivti0n.github.io/reactchat/packages/react-chat/dist/bundle.mjs"; v.type = "text/javascript"; s.parentNode.insertBefore(v, s);
     })(document, 'script');
-  </script>
+</script>
 </body>
 
 </html>
+
+
+
+
